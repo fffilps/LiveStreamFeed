@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import MuxMediaPlayer from './MuxMediaPlayer'
 import MuxLiveStreamsSidebar from './MuxLiveStreamsSidebar'
+import MuxPastAssetsSidebar from './MuxPastAssetsSidebar'
 import StreamPublisher from './StreamPublisher'
 import FfmpegCompanionControls from './FfmpegCompanionControls'
 import ObsMuxSetup from './ObsMuxSetup'
@@ -329,6 +330,8 @@ export default function LiveStreamCreator() {
           <FfmpegCompanionControls />
         </div>
       </div>
+
+      <MuxPastAssetsSidebar />
     </div>
   )
 }

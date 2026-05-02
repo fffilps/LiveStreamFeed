@@ -42,10 +42,10 @@ export default defineConfig(({ mode }) => {
       react(),
       tailwindcss(),
       {
-        name: 'mux-live-streams-proxy',
+        name: 'mux-api-proxy',
         configureServer(server) {
-          const muxBase = 'https://api.mux.com/video/v1/live-streams'
-          const apiPrefix = '/api/mux/live-streams'
+          const liveStreamsBase = 'https://api.mux.com/video/v1/live-streams'
+          const liveStreamsPrefix = '/api/mux/live-streams'
 
           function muxAuthHeader() {
             const id = muxEnv.MUX_TOKEN_ID
@@ -60,15 +60,25 @@ export default defineConfig(({ mode }) => {
             res.end(typeof body === 'string' ? body : JSON.stringify(body))
           }
 
+          function readRawBody(req) {
+            return new Promise((resolve, reject) => {
+              const chunks = []
+              req.on('data', (c) => chunks.push(c))
+              req.on('end', () => resolve(Buffer.concat(chunks)))
+              req.on('error', reject)
+            })
+          }
+
           server.middlewares.use(async (req, res, next) => {
             const url = new URL(req.url || '/', 'http://vite.local')
-            if (!url.pathname.startsWith(apiPrefix)) {
-              next()
-              return
-            }
+            const { pathname, search } = url
 
             const auth = muxAuthHeader()
-            if (!auth) {
+            if (
+              pathname.startsWith('/api/mux/') &&
+              !auth &&
+              pathname !== '/api/mux/'
+            ) {
               sendJson(res, 500, {
                 error:
                   'Missing MUX_TOKEN_ID or MUX_TOKEN_SECRET (set in .env.local or local.env).',
@@ -76,16 +86,75 @@ export default defineConfig(({ mode }) => {
               return
             }
 
-            const restPath = url.pathname.slice(apiPrefix.length)
-            const isCollection = restPath === '' || restPath === '/'
-            const idFromPath =
-              !isCollection && restPath.startsWith('/')
-                ? decodeURIComponent(restPath.slice(1).split('/')[0])
-                : null
-
             try {
+              /** @see https://docs.mux.com/api-reference/video/list-assets */
+              if (pathname.startsWith('/api/mux/assets') && req.method === 'GET') {
+                const rest = pathname.slice('/api/mux/assets'.length)
+                const muxPath = `/video/v1/assets${rest || ''}`
+                const muxRes = await fetch(`https://api.mux.com${muxPath}${search}`, {
+                  headers: { Authorization: auth },
+                })
+                const text = await muxRes.text()
+                res.statusCode = muxRes.status
+                res.setHeader('Content-Type', 'application/json')
+                res.end(text)
+                return
+              }
+
+              /**
+               * Robots: find key moments
+               * @see https://www.mux.com/docs/guides/robots-find-key-moments
+               */
+              if (pathname === '/api/mux/robots/jobs/find-key-moments' && req.method === 'POST') {
+                const raw = await readRawBody(req)
+                const muxRes = await fetch(
+                  'https://api.mux.com/robots/v0/jobs/find-key-moments',
+                  {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      Authorization: auth,
+                    },
+                    body: raw.length ? raw.toString('utf8') : '{}',
+                  },
+                )
+                const text = await muxRes.text()
+                res.statusCode = muxRes.status
+                res.setHeader('Content-Type', 'application/json')
+                res.end(text)
+                return
+              }
+
+              const fkJobMatch = pathname.match(
+                /^\/api\/mux\/robots\/jobs\/find-key-moments\/([^/]+)$/,
+              )
+              if (fkJobMatch && req.method === 'GET') {
+                const jobId = decodeURIComponent(fkJobMatch[1])
+                const muxRes = await fetch(
+                  `https://api.mux.com/robots/v0/jobs/find-key-moments/${encodeURIComponent(jobId)}`,
+                  { headers: { Authorization: auth } },
+                )
+                const text = await muxRes.text()
+                res.statusCode = muxRes.status
+                res.setHeader('Content-Type', 'application/json')
+                res.end(text)
+                return
+              }
+
+              if (!pathname.startsWith(liveStreamsPrefix)) {
+                next()
+                return
+              }
+
+              const restPath = pathname.slice(liveStreamsPrefix.length)
+              const isCollection = restPath === '' || restPath === '/'
+              const idFromPath =
+                !isCollection && restPath.startsWith('/')
+                  ? decodeURIComponent(restPath.slice(1).split('/')[0])
+                  : null
+
               if (req.method === 'POST' && isCollection) {
-                const muxRes = await fetch(muxBase, {
+                const muxRes = await fetch(liveStreamsBase, {
                   method: 'POST',
                   headers: {
                     'Content-Type': 'application/json',
@@ -104,7 +173,7 @@ export default defineConfig(({ mode }) => {
               }
 
               if (req.method === 'GET' && isCollection) {
-                const muxRes = await fetch(muxBase + url.search, {
+                const muxRes = await fetch(liveStreamsBase + search, {
                   headers: { Authorization: auth },
                 })
                 const text = await muxRes.text()
@@ -115,7 +184,7 @@ export default defineConfig(({ mode }) => {
               }
 
               if (req.method === 'GET' && idFromPath) {
-                const muxRes = await fetch(`${muxBase}/${encodeURIComponent(idFromPath)}`, {
+                const muxRes = await fetch(`${liveStreamsBase}/${encodeURIComponent(idFromPath)}`, {
                   headers: { Authorization: auth },
                 })
                 const text = await muxRes.text()

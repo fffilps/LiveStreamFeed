@@ -1,0 +1,19 @@
+{
+  "images": [
+    {
+      "id": "styleface-gamegirl",
+      "label": "Styleface · gamegirl",
+      "file": "gamegirl.jpg"
+    },
+    {
+      "id": "styleface-animegirl",
+      "label": "Styleface · animegirl",
+      "file": "animegirl.jpg"
+    },
+    {
+      "id": "styleface-animebird",
+      "label": "Styleface · animebird",
+      "file": "animebird.jpg"
+    }
+  ]
+}

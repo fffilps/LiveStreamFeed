@@ -1,4 +1,5 @@
 const STORAGE_KEY = 'liveFeed:muxDailyLiveStream'
+const BROADCAST_NAME = 'livefeed:mux-daily-session'
 
 export function getLocalDayKey() {
   const d = new Date()
@@ -22,6 +23,16 @@ export function loadTodaySession() {
   }
 }
 
+function broadcastDailySessionChanged() {
+  try {
+    const ch = new BroadcastChannel(BROADCAST_NAME)
+    ch.postMessage({ type: 'mux-daily-updated' })
+    ch.close()
+  } catch {
+    //
+  }
+}
+
 export function saveTodaySession({ liveStreamId, playbackId, streamKey }) {
   const payload = {
     dayKey: getLocalDayKey(),
@@ -30,4 +41,21 @@ export function saveTodaySession({ liveStreamId, playbackId, streamKey }) {
     streamKey: streamKey ?? null,
   }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(payload))
+  broadcastDailySessionChanged()
+}
+
+/** When another tab updates today’s Mux session, run `fn` (e.g. refresh dashboard player). */
+export function subscribeMuxSessionChanged(fn) {
+  let ch
+  try {
+    ch = new BroadcastChannel(BROADCAST_NAME)
+  } catch {
+    return () => {}
+  }
+  ch.onmessage = () => {
+    fn()
+  }
+  return () => {
+    ch.close()
+  }
 }

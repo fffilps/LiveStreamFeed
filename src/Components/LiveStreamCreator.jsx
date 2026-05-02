@@ -2,7 +2,13 @@ import { useCallback, useEffect, useState } from 'react'
 import MuxMediaPlayer from './MuxMediaPlayer'
 import StreamPublisher from './StreamPublisher'
 import FfmpegCompanionControls from './FfmpegCompanionControls'
-import { getLocalDayKey, loadTodaySession, saveTodaySession } from '../lib/muxDailySession'
+import ObsMuxSetup from './ObsMuxSetup'
+import {
+  getLocalDayKey,
+  loadTodaySession,
+  saveTodaySession,
+  subscribeMuxSessionChanged,
+} from '../lib/muxDailySession'
 
 const MUX_RTMP_URL = 'rtmps://global-live.mux.com:443/app'
 
@@ -133,6 +139,21 @@ export default function LiveStreamCreator() {
       void refreshLiveStreamsList()
     }, 0)
     return () => clearTimeout(timer)
+  }, [refreshLiveStreamsList])
+
+  useEffect(() => {
+    return subscribeMuxSessionChanged(() => {
+      const s = loadTodaySession()
+      if (s) {
+        setHasSavedSessionToday(true)
+        setPlaybackId(s.playbackId)
+        setStreamKey(s.streamKey)
+        setRaw({ id: s.liveStreamId })
+        setPlayerReloadNonce((n) => n + 1)
+        setError(null)
+      }
+      void refreshLiveStreamsList()
+    })
   }, [refreshLiveStreamsList])
 
   function applyStreamRecord(data) {
@@ -445,6 +466,7 @@ export default function LiveStreamCreator() {
               </p>
             </div>
           )}
+          <ObsMuxSetup rtmpUrl={MUX_RTMP_URL} streamKey={streamKey} showLucyCaptureSteps={false} />
           {raw?.id && (
             <p className="text-xs text-neutral-500">
               Live stream id:{' '}

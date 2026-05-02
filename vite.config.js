@@ -40,54 +40,95 @@ export default defineConfig(({ mode }) => {
       {
         name: 'mux-live-streams-proxy',
         configureServer(server) {
-          server.middlewares.use('/api/mux/live-streams', async (req, res) => {
-            if (req.method !== 'POST') {
-              res.statusCode = 405
-              res.setHeader('Allow', 'POST')
-              res.end()
-              return
-            }
+          const muxBase = 'https://api.mux.com/video/v1/live-streams'
+          const apiPrefix = '/api/mux/live-streams'
 
+          function muxAuthHeader() {
             const id = muxEnv.MUX_TOKEN_ID
             const secret = muxEnv.MUX_TOKEN_SECRET
-            if (!id || !secret) {
-              res.statusCode = 500
-              res.setHeader('Content-Type', 'application/json')
-              res.end(
-                JSON.stringify({
-                  error:
-                    'Missing MUX_TOKEN_ID or MUX_TOKEN_SECRET (set in .env.local or local.env).',
-                }),
-              )
+            if (!id || !secret) return null
+            return `Basic ${Buffer.from(`${id}:${secret}`, 'utf8').toString('base64')}`
+          }
+
+          function sendJson(res, status, body) {
+            res.statusCode = status
+            res.setHeader('Content-Type', 'application/json')
+            res.end(typeof body === 'string' ? body : JSON.stringify(body))
+          }
+
+          server.middlewares.use(async (req, res, next) => {
+            const url = new URL(req.url || '/', 'http://vite.local')
+            if (!url.pathname.startsWith(apiPrefix)) {
+              next()
               return
             }
 
-            const auth = Buffer.from(`${id}:${secret}`, 'utf8').toString('base64')
-            try {
-              const muxRes = await fetch('https://api.mux.com/video/v1/live-streams', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  Authorization: `Basic ${auth}`,
-                },
-                body: JSON.stringify({
-                  playback_policies: ['public'],
-                  new_asset_settings: { playback_policies: ['public'] },
-                }),
+            const auth = muxAuthHeader()
+            if (!auth) {
+              sendJson(res, 500, {
+                error:
+                  'Missing MUX_TOKEN_ID or MUX_TOKEN_SECRET (set in .env.local or local.env).',
               })
-              const text = await muxRes.text()
-              res.statusCode = muxRes.status
-              res.setHeader('Content-Type', 'application/json')
-              res.end(text)
+              return
+            }
+
+            const restPath = url.pathname.slice(apiPrefix.length)
+            const isCollection = restPath === '' || restPath === '/'
+            const idFromPath =
+              !isCollection && restPath.startsWith('/')
+                ? decodeURIComponent(restPath.slice(1).split('/')[0])
+                : null
+
+            try {
+              if (req.method === 'POST' && isCollection) {
+                const muxRes = await fetch(muxBase, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: auth,
+                  },
+                  body: JSON.stringify({
+                    playback_policies: ['public'],
+                    new_asset_settings: { playback_policies: ['public'] },
+                  }),
+                })
+                const text = await muxRes.text()
+                res.statusCode = muxRes.status
+                res.setHeader('Content-Type', 'application/json')
+                res.end(text)
+                return
+              }
+
+              if (req.method === 'GET' && isCollection) {
+                const muxRes = await fetch(muxBase + url.search, {
+                  headers: { Authorization: auth },
+                })
+                const text = await muxRes.text()
+                res.statusCode = muxRes.status
+                res.setHeader('Content-Type', 'application/json')
+                res.end(text)
+                return
+              }
+
+              if (req.method === 'GET' && idFromPath) {
+                const muxRes = await fetch(`${muxBase}/${encodeURIComponent(idFromPath)}`, {
+                  headers: { Authorization: auth },
+                })
+                const text = await muxRes.text()
+                res.statusCode = muxRes.status
+                res.setHeader('Content-Type', 'application/json')
+                res.end(text)
+                return
+              }
+
+              res.statusCode = 405
+              res.setHeader('Allow', 'GET, POST')
+              res.end()
             } catch (e) {
-              res.statusCode = 502
-              res.setHeader('Content-Type', 'application/json')
-              res.end(
-                JSON.stringify({
-                  error: 'Mux request failed',
-                  message: e instanceof Error ? e.message : String(e),
-                }),
-              )
+              sendJson(res, 502, {
+                error: 'Mux request failed',
+                message: e instanceof Error ? e.message : String(e),
+              })
             }
           })
         },

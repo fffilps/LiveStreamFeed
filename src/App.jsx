@@ -1,6 +1,7 @@
 import { BrowserRouter, Link, Route, Routes } from 'react-router-dom'
 import CameraStreamPage from './pages/CameraStreamPage'
 import HomePage from './pages/HomePage'
+import WatchLivePage from './pages/WatchLivePage'
 
 function App() {
   return (
@@ -27,6 +28,7 @@ function App() {
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/camera" element={<CameraStreamPage />} />
+            <Route path="/watch" element={<WatchLivePage />} />
           </Routes>
         </main>
       </div>

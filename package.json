@@ -7,13 +7,17 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "stream:camera": "bash scripts/stream-camera-to-mux.sh",
+    "stream:companion": "node server/stream-companion.mjs"
   },
   "dependencies": {
+    "@fal-ai/client": "^1.10.0",
     "@mux/mux-player-react": "^3.13.0",
     "@tailwindcss/vite": "^4.2.4",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
+    "react-router-dom": "^7.14.2",
     "tailwindcss": "^4.2.4"
   },
   "devDependencies": {

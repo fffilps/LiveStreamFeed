@@ -1,0 +1,3 @@
+anime styled bird face portriat
+{style} styled {thing} face portriat
+https://fal.ai/models/fal-ai/flux/schnell

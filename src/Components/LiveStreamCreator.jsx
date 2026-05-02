@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import MuxMediaPlayer from './MuxMediaPlayer'
+import StreamPublisher from './StreamPublisher'
+import FfmpegCompanionControls from './FfmpegCompanionControls'
 import { getLocalDayKey, loadTodaySession, saveTodaySession } from '../lib/muxDailySession'
 
 const MUX_RTMP_URL = 'rtmps://global-live.mux.com:443/app'
@@ -156,6 +158,28 @@ export default function LiveStreamCreator() {
     setError(null)
   }
 
+  async function createLiveStreamViaApi() {
+    const res = await fetch('/api/mux/live-streams', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    })
+    const body = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      const msg =
+        body?.error?.messages?.join?.('; ') ||
+        body?.error ||
+        body?.message ||
+        res.statusText
+      throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg))
+    }
+    const data = body.data
+    const pid = pickPublicPlaybackId(data)
+    if (!data?.id || !pid) {
+      throw new Error('Mux response missing live stream id or playback id')
+    }
+    return data
+  }
+
   async function ensureTodayLiveStream() {
     setLoading(true)
     setError(null)
@@ -170,24 +194,34 @@ export default function LiveStreamCreator() {
     setStreamKey(null)
     setRaw(null)
     try {
-      const res = await fetch('/api/mux/live-streams', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      })
-      const body = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        const msg =
-          body?.error?.messages?.join?.('; ') ||
-          body?.error ||
-          body?.message ||
-          res.statusText
-        throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg))
-      }
-      const data = body.data
+      const data = await createLiveStreamViaApi()
       const pid = pickPublicPlaybackId(data)
-      if (!data?.id || !pid) {
-        throw new Error('Mux response missing live stream id or playback id')
-      }
+      saveTodaySession({
+        liveStreamId: data.id,
+        playbackId: pid,
+        streamKey: data.stream_key ?? null,
+      })
+      setHasSavedSessionToday(true)
+      applyStreamRecord(data)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setLoading(false)
+      await refreshLiveStreamsList()
+    }
+  }
+
+  async function createNewLiveStream() {
+    const ok = window.confirm(
+      'Create a new Mux live stream? This adds another stream in your account. Your saved RTMP stream key for “today” will switch to this new stream so FFmpeg and the player stay in sync.',
+    )
+    if (!ok) return
+
+    setLoading(true)
+    setError(null)
+    try {
+      const data = await createLiveStreamViaApi()
+      const pid = pickPublicPlaybackId(data)
       saveTodaySession({
         liveStreamId: data.id,
         playbackId: pid,
@@ -217,18 +251,28 @@ export default function LiveStreamCreator() {
   return (
     <div className="flex flex-col gap-8 lg:flex-row lg:items-start">
       <aside className="w-full shrink-0 space-y-3 rounded-lg border border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-700 dark:bg-neutral-900 lg:w-80">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-start justify-between gap-2">
           <h2 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
             Live streams
           </h2>
-          <button
-            type="button"
-            onClick={() => refreshLiveStreamsList()}
-            disabled={listLoading}
-            className="text-xs font-medium text-neutral-600 underline-offset-2 hover:underline disabled:opacity-50 dark:text-neutral-400"
-          >
-            {listLoading ? 'Loading…' : 'Refresh'}
-          </button>
+          <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+            <button
+              type="button"
+              onClick={() => void createNewLiveStream()}
+              disabled={loading}
+              className="rounded-md bg-neutral-900 px-2.5 py-1 text-xs font-medium text-white hover:bg-neutral-800 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200"
+            >
+              {loading ? 'Working…' : 'New stream'}
+            </button>
+            <button
+              type="button"
+              onClick={() => refreshLiveStreamsList()}
+              disabled={listLoading}
+              className="rounded-md px-2.5 py-1 text-xs font-medium text-neutral-600 underline-offset-2 ring-1 ring-neutral-300 hover:bg-neutral-100 disabled:opacity-50 dark:text-neutral-400 dark:ring-neutral-600 dark:hover:bg-neutral-800"
+            >
+              {listLoading ? 'Loading…' : 'Refresh'}
+            </button>
+          </div>
         </div>
         <div className="flex flex-wrap gap-2 text-xs">
           <span className="self-center text-neutral-500 dark:text-neutral-400">Show:</span>
@@ -346,6 +390,17 @@ export default function LiveStreamCreator() {
         </div>
 
         <div className="space-y-3 rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-sm dark:border-neutral-700 dark:bg-neutral-900">
+          <h3 className="font-medium text-neutral-900 dark:text-neutral-100">Browser capture</h3>
+          <p className="text-xs leading-snug text-neutral-600 dark:text-neutral-400">
+            Choose camera or screen plus microphone for a local preview. Mux Live ingest is{' '}
+            <strong className="font-medium text-neutral-800 dark:text-neutral-200">RTMP/SRT</strong>{' '}
+            — the browser cannot publish that directly. Typical setups: OBS or Streamlabs with this
+            feed as a source, or a server that accepts WebRTC and forwards RTMP to your stream key.
+          </p>
+          <StreamPublisher />
+        </div>
+
+        <div className="space-y-3 rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-sm dark:border-neutral-700 dark:bg-neutral-900">
           <p className="font-medium text-neutral-800 dark:text-neutral-200">
             Today ({dayLabel}): one new Mux live stream per browser, per day. Later visits reuse the
             same RTMP details from this device — no extra creates until tomorrow.
@@ -402,6 +457,7 @@ export default function LiveStreamCreator() {
               <span className="font-mono text-neutral-700 dark:text-neutral-300">{playbackId}</span>
             </p>
           )}
+          <FfmpegCompanionControls />
         </div>
       </div>
     </div>

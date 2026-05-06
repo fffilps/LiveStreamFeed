@@ -1,6 +1,7 @@
 import { BrowserRouter, Link, Route, Routes } from 'react-router-dom'
 import CameraStreamPage from './pages/CameraStreamPage'
 import HomePage from './pages/HomePage'
+import OvershootPage from './pages/OvershootPage'
 import WatchLivePage from './pages/WatchLivePage'
 
 function App() {
@@ -21,6 +22,12 @@ function App() {
             >
               Camera & stream
             </Link>
+            <Link
+              to="/overshoot"
+              className="text-neutral-700 hover:text-neutral-950 dark:text-neutral-300 dark:hover:text-white"
+            >
+              Overshoot
+            </Link>
           </nav>
         </header>
 
@@ -28,6 +35,7 @@ function App() {
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/camera" element={<CameraStreamPage />} />
+            <Route path="/overshoot" element={<OvershootPage />} />
             <Route path="/watch" element={<WatchLivePage />} />
           </Routes>
         </main>

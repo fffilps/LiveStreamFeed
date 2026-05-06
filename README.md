@@ -1,34 +1,117 @@
-# React + Vite
+# liveFeed
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React + Vite app for **Mux live streaming**, **Lucy VTON (fal.ai)**, and **Overshoot** vision/chat demos. The dev server can proxy Mux and Overshoot API calls so secrets stay in `local.env` instead of the browser bundle.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Requirements
 
-## React Compiler
+- **Node.js** 18+ (for `npm run dev` / `npm run build`)
+- **Optional:** **FFmpeg** on macOS if you use `npm run stream:camera` to publish your webcam to Mux
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+---
 
-## Expanding the ESLint configuration
+## Quick start
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+1. **Clone and install**
 
+   ```bash
+   git clone <your-fork-or-repo-url> liveFeed
+   cd liveFeed
+   npm install
+   ```
 
-In the app, create/resume today’s live stream and copy the stream key (and make sure you’re not sharing it publicly).
+2. **Configure environment**
 
-In local.env, set the key (uncomment the line and paste the value):
+   ```bash
+   cp .env.example local.env
+   ```
 
-MUX_STREAM_KEY=your-actual-stream-key
-If the wrong camera/mic is used, list devices and set indexes:
+   Edit **`local.env`** and add your own keys (see [Environment variables](#environment-variables) below).  
+   `local.env` is **gitignored** — do not commit it.
 
+3. **Run the app**
+
+   ```bash
+   npm run dev
+   ```
+
+   Open the URL Vite prints (usually `http://localhost:5173`).
+
+4. **Lint / build** (optional)
+
+   ```bash
+   npm run lint
+   npm run build
+   ```
+
+---
+
+## Environment variables
+
+All values below go in **`local.env`** unless noted. The template in [`.env.example`](.env.example) mirrors the same keys.
+
+| Variable | Used for | Where to get it |
+|----------|----------|-----------------|
+| **`MUX_TOKEN_ID`** / **`MUX_TOKEN_SECRET`** | Listing/creating live streams, assets, dev API proxy to Mux | [Mux Dashboard → Access Tokens](https://dashboard.mux.com/settings/access-tokens) |
+| **`OVERSHOOT_API_KEY`** | Overshoot streams, keepalive, chat completions (via dev proxy) | [Overshoot](https://overshoot.ai) → API keys (`ovs_...`). **Do not** use a `VITE_` prefix. |
+| **`MUX_STREAM_KEY`** | Optional convenience for **`npm run stream:camera`** | Create a live stream in the app, then copy the **stream key** from the dashboard UI into `local.env`. |
+| **`VITE_FAL_KEY`** | Lucy VTON realtime on **`/camera`** | [fal.ai Dashboard](https://fal.ai/dashboard) — API key. Can also live in `.env` / `.env.local`. |
+
+**Production note:** `vite.config.js` only proxies Mux/Overshoot while **`npm run dev`** runs. For a deployed site, put the same forwards on your backend so **`OVERSHOOT_API_KEY`** and **Mux Basic auth** never ship to the browser.
+
+---
+
+## App pages
+
+| Route | Nav label | What it does |
+|-------|-----------|--------------|
+| **`/`** | Dashboard | **Mux live stream** workflow: sidebar of streams, create/resume “today’s” stream, RTMP details, browser capture preview (WebRTC preview only — Mux ingest is RTMP/SRT), FFmpeg helper copy. **Past recordings** sidebar lists Mux VOD assets; open one for playback and optional **Mux Robots “find key moments”** job. |
+| **`/camera`** | Camera & stream | **Lucy VTON** (fal.ai) realtime try-on plus Mux live stream sidebar (same list/controls as dashboard). For local styles, reference images under `public/reference-images/`. |
+| **`/overshoot`** | Overshoot | **Overshoot.ai** demo: create a stream, publish **camera/mic** or **Mux HLS** (public playback ID / URL → `stream.mux.com/...m3u8` → `captureStream` into LiveKit), keepalive, then **chat completions** on the latest frame (`ovs://...`). |
+| **`/watch`** | *(no nav link; shareable URL)* | Minimal **Mux player** page: `?playbackId=` query param for embed-style viewing (e.g. shared links / QR). |
+
+---
+
+## Scripts
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Vite dev server + middleware (Mux / Overshoot proxies, optional reference-image save). |
+| `npm run build` | Production build to `dist/`. |
+| `npm run preview` | Preview the production build locally. |
+| `npm run lint` | ESLint. |
+| `npm run stream:camera` | macOS: FFmpeg publishes **camera + mic** to Mux using **`MUX_STREAM_KEY`** (and optional `MUX_AVFOUNDATION_*` — see script / terminal help). |
+
+For `stream:camera`, list AVFoundation devices if needed:
+
+```bash
 ffmpeg -f avfoundation -list_devices true -i ""
-Then, for example:
+```
 
+Example:
+
+```bash
 export MUX_AVFOUNDATION_VIDEO=0
 export MUX_AVFOUNDATION_AUDIO=1
-From the repo root, start the stream:
-
 npm run stream:camera
-In the app, use Retry connection (or open the Mux player) so playback picks up once Mux shows the stream as active.
+```
+
+Then in the app use **Retry connection** or open **`/watch?playbackId=...`** once Mux shows the stream as active.
+
+---
+
+## Tech stack
+
+- **React** + **React Router** + **Vite**
+- **Tailwind CSS** v4
+- **@mux/mux-player-react** for Mux playback
+- **livekit-client** + **hls.js** on **`/overshoot`** (Mux HLS bridge)
+- **@fal-ai/client** for Lucy on **`/camera`**
+
+---
+
+## License / security
+
+- Treat **Mux stream keys**, **Mux tokens**, **Overshoot API keys**, and **fal keys** as secrets.
+- This README and **`.env.example`** use placeholders only — never commit real credentials.

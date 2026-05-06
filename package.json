@@ -15,6 +15,8 @@
     "@fal-ai/client": "^1.10.0",
     "@mux/mux-player-react": "^3.13.0",
     "@tailwindcss/vite": "^4.2.4",
+    "hls.js": "^1.6.16",
+    "livekit-client": "^2.18.8",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "react-router-dom": "^7.14.2",

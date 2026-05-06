@@ -14,6 +14,24 @@
       "id": "styleface-animebird",
       "label": "Styleface · animebird",
       "file": "animebird.jpg"
+    },
+    {
+      "id": "gen-1777691744801",
+      "label": "Styleface · Anime · Bird",
+      "file": "gen-1777691744801.png",
+      "sourceUrl": "https://v3b.fal.media/files/b/0a988ad6/zmSwDQMeJU96TZaAwOlJf.png"
+    },
+    {
+      "id": "gen-1777691751160",
+      "label": "Styleface · Anime · Robot",
+      "file": "gen-1777691751160.png",
+      "sourceUrl": "https://v3b.fal.media/files/b/0a988ad6/RVlUr_qP9iBfWh0aBvIv5.png"
+    },
+    {
+      "id": "gen-1777708379218",
+      "label": "Styleface · Cyberpunk · Robot",
+      "file": "gen-1777708379218.png",
+      "sourceUrl": "https://v3b.fal.media/files/b/0a989155/1f9E8tWST9IvDaqmYz-9H.png"
     }
   ]
 }

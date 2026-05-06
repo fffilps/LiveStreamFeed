@@ -206,6 +206,137 @@ export default defineConfig(({ mode }) => {
           })
         },
       },
+      /**
+       * Overshoot — dev-only proxy. Production: forward the same paths on a real server;
+       * never expose `OVERSHOOT_API_KEY` in the client bundle.
+       * @see https://docs.overshoot.ai/quickstart
+       */
+      {
+        name: 'overshoot-api-proxy',
+        configureServer(server) {
+          const base = 'https://api.overshoot.ai/v1'
+          const prefix = '/api/overshoot'
+
+          function overshootAuth() {
+            const key = muxEnv.OVERSHOOT_API_KEY?.trim()
+            if (!key) return null
+            return `Bearer ${key}`
+          }
+
+          function sendJson(res, status, body) {
+            res.statusCode = status
+            res.setHeader('Content-Type', 'application/json')
+            res.end(typeof body === 'string' ? body : JSON.stringify(body))
+          }
+
+          function readRawBody(req) {
+            return new Promise((resolve, reject) => {
+              const chunks = []
+              req.on('data', (c) => chunks.push(c))
+              req.on('end', () => resolve(Buffer.concat(chunks)))
+              req.on('error', reject)
+            })
+          }
+
+          function forwardText(res, upstream) {
+            return upstream.text().then((text) => {
+              res.statusCode = upstream.status
+              res.setHeader('Content-Type', upstream.headers.get('content-type') || 'application/json')
+              res.end(text)
+            })
+          }
+
+          server.middlewares.use(async (req, res, next) => {
+            const url = new URL(req.url || '/', 'http://vite.local')
+            const { pathname } = url
+
+            if (!pathname.startsWith(prefix)) {
+              next()
+              return
+            }
+
+            const auth = overshootAuth()
+            if (!auth) {
+              sendJson(res, 500, {
+                error:
+                  'Missing OVERSHOOT_API_KEY (add to local.env; see .env.example).',
+              })
+              return
+            }
+
+            try {
+              if (pathname === `${prefix}/chat/completions` && req.method === 'POST') {
+                const raw = await readRawBody(req)
+                const upstream = await fetch(`${base}/chat/completions`, {
+                  method: 'POST',
+                  headers: {
+                    Authorization: auth,
+                    'Content-Type': 'application/json',
+                  },
+                  body: raw.length ? raw.toString('utf8') : '{}',
+                })
+                await forwardText(res, upstream)
+                return
+              }
+
+              const keepMatch = pathname.match(
+                /^\/api\/overshoot\/streams\/([^/]+)\/keepalive$/,
+              )
+              if (keepMatch && req.method === 'POST') {
+                const id = decodeURIComponent(keepMatch[1])
+                const raw = await readRawBody(req)
+                const upstream = await fetch(`${base}/streams/${encodeURIComponent(id)}/keepalive`, {
+                  method: 'POST',
+                  headers: {
+                    Authorization: auth,
+                    ...(raw.length ? { 'Content-Type': 'application/json' } : {}),
+                  },
+                  body: raw.length ? raw.toString('utf8') : undefined,
+                })
+                await forwardText(res, upstream)
+                return
+              }
+
+              const streamIdMatch = pathname.match(/^\/api\/overshoot\/streams\/([^/]+)$/)
+              if (streamIdMatch && req.method === 'DELETE') {
+                const id = decodeURIComponent(streamIdMatch[1])
+                const upstream = await fetch(`${base}/streams/${encodeURIComponent(id)}`, {
+                  method: 'DELETE',
+                  headers: { Authorization: auth },
+                })
+                await forwardText(res, upstream)
+                return
+              }
+
+              if (
+                (pathname === `${prefix}/streams` || pathname === `${prefix}/streams/`) &&
+                req.method === 'POST'
+              ) {
+                const raw = await readRawBody(req)
+                const upstream = await fetch(`${base}/streams`, {
+                  method: 'POST',
+                  headers: {
+                    Authorization: auth,
+                    ...(raw.length ? { 'Content-Type': 'application/json' } : {}),
+                  },
+                  body: raw.length ? raw.toString('utf8') : undefined,
+                })
+                await forwardText(res, upstream)
+                return
+              }
+
+              res.statusCode = 404
+              res.setHeader('Content-Type', 'application/json')
+              res.end(JSON.stringify({ error: 'Not found' }))
+            } catch (e) {
+              sendJson(res, 502, {
+                error: 'Overshoot request failed',
+                message: e instanceof Error ? e.message : String(e),
+              })
+            }
+          })
+        },
+      },
       {
         name: 'reference-images-save',
         configureServer(server) {
